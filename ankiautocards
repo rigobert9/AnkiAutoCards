@@ -1,0 +1,103 @@
+#!/usr/bin/env python3.10
+# General-purpose Anki card-creating script, with parsing of notes or quick
+# adding
+
+# Create a new config file id it does not exist, and import it to use aliases
+# for decks (for example).
+from os import path
+from sys import exit
+from subprocess import check_output
+from anki.storage import Collection
+import argparse
+import re
+
+def getDefaultHome() -> str:
+    # Find the Anki directory
+    home = path.expanduser("~")
+    anki_home = path.join(home, '.local',  'share',  'Anki2', 'User 1')
+    anki_collection_path = path.join(anki_home, "collection.anki2")
+    return anki_collection_path
+
+def note(args, col, deck, info) -> None:
+    # Check if number of fields corresponds to the number of fields
+    info("Creating note")
+    note = col.newNote()
+    info("Checking number of fields")
+    if (maxfields := len(note.fields)) >= len(args.field):
+        for i in range(len(args.field)):
+            note.fields[i] = args.field[i]
+        col.add_note(note, deck['id'])
+    else:
+        print(f"Number of fields given is inadequate : {maxfields} fields were expected but {len(args.field)} were given.")
+        exit(1)
+
+def parse(args, col, deck, info) -> None:
+    pass
+
+def main():
+# Faire une option de parsing, elle-même suivie de lettre contenant les trucs à
+# chercher (dates, traductions, tableaux, noms propres ...)
+# Toujours dans les phrases ?
+
+    # Getting args
+    argparser = argparse.ArgumentParser(\
+            formatter_class = argparse.RawDescriptionHelpFormatter,
+            description = \
+"""Add, delete and parse files for Anki flashcards.
+
+Actions:
+  note    create a new note to generate cards
+  parse   use the parsing options to create notes from a markdown text
+
+""")
+    argparser.add_argument('action', nargs='?', default='note', \
+            choices=['note', 'parse'],
+            help="the action to perform")
+    argparser.add_argument('field', nargs='+', \
+            help="the fields of the new note to create, or of the the recipients of the action")
+    argparser.add_argument("-d", "--deck", type=str, default='Default', \
+            help="the deck to interact with")
+    argparser.add_argument("-p", "--path", type=str, \
+            help="the path to the database")
+    argparser.add_argument("-m", "--model", type=str, default='Basic', \
+            help="the card model to use")
+    argparser.add_argument("-v", action='store_true', \
+            help="activate verbose mode")
+    argparser.add_argument('--dry-run', action='store_true', \
+            help="perform a dry run")
+    args = argparser.parse_args()
+
+    # 0. Check for the verbose option
+    if args.v:
+        def info(message):
+            print(message)
+    else:
+        def info(message):
+            pass
+
+    # 1. Load the anki collection
+    if args.path is None:
+        args.path = getDefaultHome()
+    info(f"Passed arguments : {args}")
+    info(f"Getting collection from {args.path}")
+    col = Collection(args.path, log=True)
+
+    # 2. Select the deck
+    modelBasic = col.models.by_name(args.model)
+    deck = col.decks.by_name(args.deck)
+    col.decks.select(deck['id'])
+    col.decks.current()['mid'] = modelBasic['id']
+
+    # 3. Create the cards, according to the action
+    if args.action == "note": note(args, col, deck, info)
+    elif args.action == "parse": parse(args, col, deck, info)
+
+    # 4. Save changes
+    if args.dry_run:
+        info("Discarding changes")
+    else:
+        info("Saving collection.")
+        col.save()
+
+if __name__ == "__main__":
+    main()
