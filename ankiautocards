@@ -11,6 +11,17 @@ from anki.storage import Collection
 import argparse
 import re
 
+# The parsers' short name, long name, their default value, help string and regex
+PARSERS = [
+        ("V", "vocabulary", "Basic",
+        "search for vocabulary tables (word |translation), uses 'Basic' by \
+        default"),
+        ]
+# The expressions associated with each parsers' name
+EXPRESSIONS = {
+        "vocabulary": re.compile(r''),
+        }
+
 def getDefaultHome() -> str:
     # Find the Anki directory
     # To Do: Add support for AnkiDroid
@@ -28,19 +39,17 @@ def preprocess(func):
         else:
             def info(message):
                 pass
+        info(f"Passed arguments : {args}")
 
         # 1. Load the anki collection
         if args.path is None:
             args.path = getDefaultHome()
-        info(f"Passed arguments : {args}")
         info(f"Getting collection from {args.path}")
         col = Collection(args.path, log=True)
 
         # 2. Select the deck
-        modelBasic = col.models.by_name(args.model)
         deck = col.decks.by_name(args.deck)
         col.decks.select(deck['id'])
-        col.decks.current()['mid'] = modelBasic['id']
 
         # 3. Create the cards, according to the action
         func(args, col, deck, info)
@@ -55,6 +64,9 @@ def preprocess(func):
 
 @preprocess
 def note(args, col, deck, info) -> None:
+    # Getting the model used
+    modelBasic = col.models.by_name(args.model)
+    col.decks.current()['mid'] = modelBasic['id']
     # Check if number of fields corresponds to the number of fields
     info("Creating note")
     note = col.newNote()
@@ -70,10 +82,32 @@ def note(args, col, deck, info) -> None:
 
 @preprocess
 def parse(args, col, deck, info) -> None:
+    # To put in expressions ?
     re.M = True # Try multiline regexes ?
-    expressions = [] # Expressions to check for
-    if args.V: expressions.append(re.compile(\
-            r''))
+    re.S = True # . matches newline
+    re.X = True # commented regexes
+    expressions = []
+    for fil in args.files:
+        with open(fil) as text:
+            for parser in args.parsers:
+                info(f"Getting the card model {parser[1]}")
+                modelBasic = col.models.by_name(parser[1])
+                col.decks.current()['mid'] = modelBasic['id']
+                results = EXPRESSIONS[parser[0]].findall(text)
+                # To do: check for the number of fields
+                for result in results:
+                    info(f"Creating note with data: {result}")
+                    note = col.newNote()
+                    for i in range(len(result)):
+                        note.fields[i] = result[i]
+                    col.add_note(note, deck['id'])
+
+# Action class for argparser to deal with custom models for cards in parsers
+class ActionCustomModel(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super().__init__(option_strings, dest, **kwargs)
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, self.dest + [(values)])
 
 def main():
     # Getting args
@@ -85,8 +119,6 @@ def main():
             help="the deck to interact with")
     argparser.add_argument("-p", "--path", type=str, \
             help="the path to the database")
-    argparser.add_argument("-m", "--model", type=str, default='Basic', \
-            help="the card model to use")
     argparser.add_argument("-v", action='store_true', \
             help="activate verbose mode")
     argparser.add_argument('--dry-run', action='store_true', \
@@ -99,12 +131,27 @@ def main():
             help="create a new note to generate cards")
     parser_note.add_argument('fields', nargs='+', \
             help="the fields of the new note to create")
+    parser_note.add_argument("-m", "--model", type=str, default='Basic', \
+            help="the card model to use")
     parser_note.set_defaults(func=note)
     ## parse
     parser_parse = subparsers.add_parser('parse', \
-            help="use the parsing options to create notes from a markdown text")
-    parser_parse.add_argument('-V', '--vocabulary', action="store_true", \
-            help="search for vocabulary tables (word | translation)")
+            description=\
+            "Use the parsing options to create notes from a markdown text.\
+            Each parser option has a ~1 option, which can be followed by a \
+            model of your choice, instead of the default template fit for \
+            the parser.")
+    for PARSER in PARSERS: # Create all parsers
+        parser_parse.add_argument(f"-{PARSER[0]}", f"--{PARSER[1]}",\
+                action='append_const', const=(PARSER[1],PARSER[2]), \
+                dest="parsers", \
+                help=f"{PARSER[3]}")
+        parser_parse.add_argument(f"--{PARSER[0]}1", type=str, \
+                action=ActionCustomModel, \
+                default=f"{PARSER[2]}", metavar='model', \
+                dest="parsers")
+    # args.parsers ends up being a list of tuple, containing the type of parser
+    # and the name of the model to use
     parser_parse.add_argument('files', nargs='+', \
             help="the list of files to parse")
     parser_parse.set_defaults(func=parse)
