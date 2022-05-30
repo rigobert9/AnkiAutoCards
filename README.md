@@ -6,11 +6,8 @@ templates such as lists, proper nouns or tables, and add cards to your Anki
 collection to study what you wrote down.
 
 ## Installation
-To install this script, simply ensure you've downloaded the last version of
-Anki. If the Anki library doesn't seem to be available, please install the
-'aqt' package.
-You then just need to add this script to your path.
-A package installation with pip is a WIP, coming soon.
+To install this script, simply download the code, enter the directory and run
+'pip install .'. If you're missing any dependencies, they will be installed.
 
 ## How to use
 Help can be found with the '-h' or '--help' flags.
