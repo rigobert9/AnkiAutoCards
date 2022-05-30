@@ -47,14 +47,10 @@ def preprocess(func):
         info(f"Getting collection from {args.path}")
         col = Collection(args.path, log=True)
 
-        # 2. Select the deck
-        deck = col.decks.by_name(args.deck)
-        col.decks.select(deck['id'])
+        # 2. Create the cards, according to the action
+        func(args, col, info)
 
-        # 3. Create the cards, according to the action
-        func(args, col, deck, info)
-
-        # 4. Save changes
+        # 3. Save changes
         if args.dry_run:
             info("Discarding changes")
         else:
@@ -63,13 +59,23 @@ def preprocess(func):
     return wrapper
 
 @preprocess
-def note(args, col, deck, info) -> None:
-    # Getting the model used
+def note(args, col, info) -> None:
+    # Select the deck
+    print(col.models)
+    print(col.models.by_name('Basic'))
     modelBasic = col.models.by_name(args.model)
+    deck = col.decks.by_name(args.deck)
+    col.decks.select(deck['id'])
+    # Getting the model used
     col.decks.current()['mid'] = modelBasic['id']
+    print(deck['mid'])
+    print(modelBasic['id'])
+    print(col.decks.current()['mid'])
+
     # Check if number of fields corresponds to the number of fields
     info("Creating note")
     note = col.newNote()
+    # Adding tags with note.addTag(str) ?
     info("Checking number of fields")
     if (maxfields := len(note.fields)) >= len(args.fields):
         for i in range(len(args.fields)):
@@ -81,7 +87,13 @@ def note(args, col, deck, info) -> None:
         exit(1)
 
 @preprocess
-def parse(args, col, deck, info) -> None:
+def parse(args, col, info) -> None:
+    modelBasic = col.models.by_name(args.model)
+    deck = col.decks.by_name(args.deck)
+    col.decks.select(deck['id'])
+    # Getting the model used
+    col.decks.current()['mid'] = modelBasic['id']
+
     # To put in expressions ?
     re.M = True # Try multiline regexes ?
     re.S = True # . matches newline
@@ -98,6 +110,7 @@ def parse(args, col, deck, info) -> None:
                 for result in results:
                     info(f"Creating note with data: {result}")
                     note = col.newNote()
+                    # Adding tags with note.addTag(str) ?
                     for i in range(len(result)):
                         note.fields[i] = result[i]
                     col.add_note(note, deck['id'])
